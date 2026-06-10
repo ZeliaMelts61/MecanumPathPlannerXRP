@@ -12,9 +12,9 @@ import com.pathplanner.lib.commands.PathPlannerAuto;
 
 import edu.wpi.first.wpilibj.GenericHID;
 //import edu.wpi.first.wpilibj.Joystick;
-import edu.wpi.first.wpilibj.XboxController;
+import frc.robot.SwappableController;
 import frc.robot.Constants.PathplannerConstants;
-import frc.robot.commands.ArcadeDrive;
+import frc.robot.commands.MecanumDrive;
 import frc.robot.commands.AutonomousDistance;
 import frc.robot.commands.AutonomousTime;
 import frc.robot.commands.RslCommand;
@@ -50,7 +50,7 @@ public class RobotContainer {
 
   // Assumes a gamepad plugged into channel 0
   //private final Joystick m_controller = new Joystick(0);
-  private final CommandXboxController m_controller = new CommandXboxController(0);
+  public final SwappableController m_controller = new SwappableController(0, this::configureButtonBindings);
 
   // Create SmartDashboard chooser for autonomous routines
   private final SendableChooser<Command> m_chooser;
@@ -76,7 +76,7 @@ public class RobotContainer {
     m_arm.setAngle(80);
     // Default command is arcade drive. This will run unless another command
     // is scheduled over it.
-    m_drivetrain.setDefaultCommand(getArcadeDriveCommand());
+    m_drivetrain.setDefaultCommand(getMecanumDriveCommand());
 
     // Example of how to use the onboard IO
     Trigger userButton = new Trigger(m_onboardIO::getUserButtonPressed);
@@ -127,8 +127,8 @@ public class RobotContainer {
    *
    * @return the command to run in teleop
    */
-  public Command getArcadeDriveCommand() {
-    return new ArcadeDrive(
-        m_drivetrain, () -> -m_controller.getLeftY(), () -> -m_controller.getRightX());
+  public Command getMecanumDriveCommand() {
+    return new MecanumDrive(
+        m_drivetrain, () -> -m_controller.getLeftY(), () -> m_controller.getLeftX(), () -> -m_controller.getRightX());
   }
 }

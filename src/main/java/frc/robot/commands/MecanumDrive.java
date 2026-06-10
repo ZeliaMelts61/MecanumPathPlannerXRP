@@ -9,25 +9,31 @@ import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.wpilibj2.command.Command;
 import java.util.function.Supplier;
 
-public class ArcadeDrive extends Command {
+import frc.robot.Constants.OperatorConstants;
+import frc.robot.Constants.OperatorConstants.*;
+
+public class MecanumDrive extends Command {
   private final Drivetrain m_drivetrain;
   private final Supplier<Double> m_xaxisSpeedSupplier;
+  private final Supplier<Double> m_yaxisSpeedSupplier;
   private final Supplier<Double> m_zaxisRotateSupplier;
 
   /**
-   * Creates a new ArcadeDrive. This command will drive your robot according to the speed supplier
+   * Creates a new MecanumDrive. This command will drive your robot according to the speed supplier
    * lambdas. This command does not terminate.
    *
    * @param drivetrain The drivetrain subsystem on which this command will run
    * @param xaxisSpeedSupplier Lambda supplier of forward/backward speed
    * @param zaxisRotateSupplier Lambda supplier of rotational speed
    */
-  public ArcadeDrive(
+  public MecanumDrive(
       Drivetrain drivetrain,
       Supplier<Double> xaxisSpeedSupplier,
+      Supplier<Double> yaxisSpeedSupplier,
       Supplier<Double> zaxisRotateSupplier) {
     m_drivetrain = drivetrain;
     m_xaxisSpeedSupplier = xaxisSpeedSupplier;
+    m_yaxisSpeedSupplier = yaxisSpeedSupplier;
     m_zaxisRotateSupplier = zaxisRotateSupplier;
     addRequirements(drivetrain);
   }
@@ -40,23 +46,19 @@ public class ArcadeDrive extends Command {
   @Override
 
   public void execute() {
-    double xSpeed =
-        MathUtil.applyDeadband(
-            m_xaxisSpeedSupplier.get(),
-            0.2);
-
-    double rotSpeed =
-        MathUtil.applyDeadband(
-            m_zaxisRotateSupplier.get(),
-            0.2);
+    double xSpeed = MathUtil.applyDeadband(m_xaxisSpeedSupplier.get(), OperatorConstants.kDeadband);
+    double rotSpeed = MathUtil.applyDeadband(m_zaxisRotateSupplier.get(), OperatorConstants.kDeadband);
+    double ySpeed = MathUtil.applyDeadband(m_yaxisSpeedSupplier.get(), OperatorConstants.kDeadband);
 
     //System.out.println(xSpeed);
-    m_drivetrain.arcadeDrive(xSpeed, rotSpeed);
+    m_drivetrain.mecanumDriveFieldRelative(xSpeed, ySpeed, rotSpeed);
   }
 
   // Called once the command ends or is interrupted.
   @Override
-  public void end(boolean interrupted) {}
+  public void end(boolean interrupted) {
+    m_drivetrain.stop();
+  }
 
   // Returns true when the command should end.
   @Override

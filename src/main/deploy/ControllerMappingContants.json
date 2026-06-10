@@ -1,0 +1,114 @@
+
+{
+    "ControllerMappings": {
+        "Xbox": {
+            "ReadableName": "Xbox Controller",
+            "Buttons": {
+                "kA": 1,
+                "kB": 2,
+                "kX": 3,
+                "kY": 4,
+                "kLeftBumper": 5,
+                "kRightBumper": 6,
+                "kMinus": 7,
+                "kPlus": 8,
+                "kLeftStick": 9,
+                "kRightStick": 10,
+                "kHome": 7,
+                "kCapture": 8
+            },
+            "Axes": {
+                "kLeftX": 0,
+                "kLeftY": 1,
+                "kRightX": 4,
+                "kRightY": 5,
+                "kLeftTrigger": 2,
+                "kRightTrigger": 3
+            }
+        },
+        "wireless gamepad": {
+            "ReadableName": "SwitchController",
+            "Buttons": {
+                "kA": 2,
+                "kB": 1,
+                "kX": 4,
+                "kY": 3,
+                "kLeftBumper": 5,
+                "kRightBumper": 6,
+                "kLeftTriggerButton": 7,
+                "kRightTriggerButton": 8,
+                "kMinus": 9,
+                "kPlus": 10,
+                "kLeftStick": 11,
+                "kRightStick": 12,
+                "kHome": 13,
+                "kCapture": 14
+            },
+            "Axes": {
+                "kLeftX": 0,
+                "kLeftY": 1,
+                "kRightX": 2,
+                "kRightY": 3
+            }
+        },
+        "extreme 3d pro": {
+            "ReadableName": "Joystick",
+            "Buttons": {
+                "kA": 11,
+                "kB": 12,
+                "kX": 3,
+                "kY": 2,
+                "kLeftBumper": 4,
+                "kRightBumper": 1,
+                "kLeftTriggerButton": 6,
+                "kRightTriggerButton": 7,
+                "kMinus": 8,
+                "kPlus": 9,
+                "kLeftStick": 10,
+                "kRightStick": 11,
+                "kHome": 12,
+                "kCapture": 13
+            },
+            "Axes": {
+                "kLeftX": 0,
+                "kLeftY": 1,
+                "kRightX": 2,
+                "kRightY": 3,
+                "kThrottle": 4
+            }
+        },
+        "vjoy device": {
+            "ReadableName": "Joycon2",
+            "Buttons": {
+                "kA": 5,
+                "kB": 6,
+                "kX": 7,
+                "kY": 8,
+                "kLeftBumper": 3,
+                "kRightBumper": 4,
+                "kLeftTriggerButton": 1,
+                "kRightTriggerButton": 2,
+                "kMinus": 14,
+                "kPlus": 13,
+                "kLeftStick": 19,
+                "kRightStick": 20,
+                "kHome": 21,
+                "kCapture": 22,
+                "kPovRight": 9,
+                "kPovDown": 10,
+                "kPovLeft": 12,
+                "kPovUp": 11,
+                "kMapableButton1": 17,
+                "kMapableButton2": 18,
+                "kMapableButton3": 15,
+                "kMapableButton4": 16
+            },
+            "Axes": {
+                "kLeftX": 0,
+                "kLeftY": 1,
+                "kRightX": 2,
+                "kRightY": 3
+            }
+        }
+    }
+}
