@@ -11,9 +11,8 @@ import com.pathplanner.lib.auto.NamedCommands;
 import com.pathplanner.lib.commands.PathPlannerAuto;
 
 import edu.wpi.first.wpilibj.GenericHID;
-//import edu.wpi.first.wpilibj.Joystick;
-import frc.robot.SwappableController;
 import frc.robot.Constants.PathplannerConstants;
+import frc.robot.Utils.SwappableController;
 import frc.robot.commands.MecanumDrive;
 import frc.robot.commands.AutonomousDistance;
 import frc.robot.commands.AutonomousTime;
@@ -102,6 +101,7 @@ public class RobotContainer {
     m_controller.leftBumper()
         .whileTrue(new InstantCommand(() -> m_arm.printPosition()).repeatedly().ignoringDisable(true));
     
+
     m_arm.setDefaultCommand(Commands.run(() -> m_arm.setAngle(0.0), m_arm));
     NamedCommands.registerCommand("arm up", Commands.run(() -> m_arm.setAngle(180), m_arm).andThen(Commands.run(()->System.out.println("e"))).repeatedly().ignoringDisable(true));
     //NamedCommands.registerCommand("arm up", Commands.run(() -> m_arm.setAngle(0.0), m_arm));

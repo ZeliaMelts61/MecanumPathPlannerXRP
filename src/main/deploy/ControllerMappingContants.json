@@ -49,6 +49,44 @@
                 "kLeftY": 1,
                 "kRightX": 2,
                 "kRightY": 3
+            },
+            "AxesScale" : {
+                "kLeftX": 1.33333333,
+                "kLeftY": 1.33333333,
+                "kRightX": 1.33333333,
+                "kRightY": 1.33333333
+            }
+            
+        },
+        "pro controller": {
+            "ReadableName": "Switch Pro Controller",
+            "Buttons": {
+                "kA": 2,
+                "kB": 1,
+                "kX": 4,
+                "kY": 3,
+                "kLeftBumper": 5,
+                "kRightBumper": 6,
+                "kLeftTriggerButton": 7,
+                "kRightTriggerButton": 8,
+                "kMinus": 9,
+                "kPlus": 10,
+                "kLeftStick": 11,
+                "kRightStick": 12,
+                "kHome": 13,
+                "kCapture": 14
+            },
+            "Axes": {
+                "kLeftX": 0,
+                "kLeftY": 1,
+                "kRightX": 2,
+                "kRightY": 3
+            },
+            "AxesScale" : {
+                "kLeftX": 1.33333333,
+                "kLeftY": 1.33333333,
+                "kRightX": 1.33333333,
+                "kRightY": 1.33333333
             }
         },
         "extreme 3d pro": {

@@ -37,6 +37,7 @@ import edu.wpi.first.networktables.NetworkTablesJNI;
 import edu.wpi.first.units.measure.Time;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableRegistry;
+import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj.BuiltInAccelerometer;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Encoder;
@@ -53,6 +54,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 //import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.xrp.XRPGyro;
 import edu.wpi.first.wpilibj.xrp.XRPMotor;
+import edu.wpi.first.wpilibj.xrp.XRPOnBoardIO;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.hal.simulation.RoboRioDataJNI;
@@ -62,6 +64,7 @@ import frc.robot.Constants;
 import frc.robot.RobotContainer;
 import frc.robot.Constants.DrivetrainConstants;
 import frc.robot.Constants.PathplannerConstants;
+import frc.robot.Robot;
 
 public class Drivetrain extends SubsystemBase {
   // The XRP has the left and right motors set to
@@ -136,13 +139,33 @@ public class Drivetrain extends SubsystemBase {
   private ArrayList<Pose2d> m_pathPoses = new ArrayList<Pose2d>();
   private boolean m_hasRemovedTargetPoseAndPath = false;
 
+
+  private final AnalogInput m_vinPin = new AnalogInput(0);
+
+  //private final AnalogInput analog0  = new AnalogInput(0);
+  /* 
+  private final AnalogInput analog1  = new AnalogInput(1);
+  private final AnalogInput analog2  = new AnalogInput(2);
+  private final AnalogInput analog3  = new AnalogInput(3);
+  private final AnalogInput analog4  = new AnalogInput(4);
+  private final AnalogInput analog5  = new AnalogInput(5);
+  private final AnalogInput analog6  = new AnalogInput(6);
+  private final AnalogInput analog7  = new AnalogInput(7);
+  private final AnalogInput analog8  = new AnalogInput(8);
+  private final AnalogInput analog9  = new AnalogInput(9);
+  private final AnalogInput analog10 = new AnalogInput(10);
+  private final AnalogInput analog11 = new AnalogInput(11);
+  private final AnalogInput analog12 = new AnalogInput(12);
+  private final AnalogInput analog13 = new AnalogInput(13);
+  private final AnalogInput analog14 = new AnalogInput(14);
+  private final AnalogInput analog15 = new AnalogInput(15);
+  private final AnalogInput analog16 = new AnalogInput(16);
+  */
   
 
   /** Creates a new Drivetrain. */
   public Drivetrain() {
-    for(String key: SmartDashboard.getKeys()){
-      SmartDashboard.clearPersistent(key);
-  }
+    
 
     //this sets the tolerance for the pid controllers so that they don't wiggle at low speeds
     m_drivePID.setTolerance(0.02);
@@ -163,8 +186,11 @@ public class Drivetrain extends SubsystemBase {
     double distancePerPulse = (Math.PI * DrivetrainConstants.kWheelDiameterMeter) / DrivetrainConstants.kCountsPerRevolution;
     m_frontLeftEncoder.setDistancePerPulse(distancePerPulse);
     m_frontRightEncoder.setDistancePerPulse(distancePerPulse);
-    m_backLeftEncoder.setDistancePerPulse(distancePerPulse);
+    m_backLeftEncoder.setDistancePerPulse(-distancePerPulse); // I don't know why but this encoder just runs backward
     m_backRightEncoder.setDistancePerPulse(distancePerPulse);
+
+    m_frontRightEncoder.setReverseDirection(true);
+    m_backRightEncoder.setReverseDirection(true);
 
     resetEncoders();
 
@@ -263,9 +289,34 @@ public class Drivetrain extends SubsystemBase {
     SmartDashboard.putBoolean("Controller Connected", DriverStation.isJoystickConnected(Constants.OperatorConstants.kDriverControllerPort));
     SmartDashboard.putBoolean("Robot Connected", DriverStation.isDSAttached());
     SmartDashboard.putBoolean("Robot is About to explode", velocity>DrivetrainConstants.kMaxLinearXSpeedMPS);
-    RoboRioSim.getVInVoltage();
-    SmartDashboard.putNumber("Voltage?",RoboRioSim.getVInVoltage());
-    
+    //RoboRioSim.getVInVoltage();
+    double actualVoltage = m_vinPin.getVoltage() * 4.03;
+    SmartDashboard.putNumber("Voltage?", actualVoltage);
+    SmartDashboard.putData("Front Left Encoder",m_frontLeftEncoder);
+    SmartDashboard.putData("Front Right Encoder",m_frontRightEncoder);
+    SmartDashboard.putData("Back Left Encoder",m_backLeftEncoder);
+    SmartDashboard.putData("Back Right Encoder",m_backRightEncoder);
+    /* 
+    SmartDashboard.putNumberArray("AnalogPins", new double[]{
+      analog0.getVoltage(), 
+      analog1.getVoltage(), 
+      analog2.getVoltage(), 
+      analog3.getVoltage(), 
+      analog4.getVoltage(), 
+      analog5.getVoltage(), 
+      analog6.getVoltage(), 
+      analog7.getVoltage(), 
+      analog8.getVoltage(), 
+      analog9.getVoltage(), 
+      analog10.getVoltage(),
+      analog11.getVoltage(),
+      analog12.getVoltage(),
+      analog13.getVoltage(),
+      analog14.getVoltage(),
+      analog15.getVoltage(),
+      analog16.getVoltage(),
+    });
+    */
 
   }
 
@@ -303,6 +354,8 @@ public class Drivetrain extends SubsystemBase {
   }
     
   public void resetAll(){
+    resetEncoders();
+    resetGyro();
     resetPose(Pose2d.kZero);
   }
   
@@ -382,6 +435,10 @@ public class Drivetrain extends SubsystemBase {
    */
   public void mecanumDriveFieldRelative(double xAxisSpeed, double yAxisSpeed, double zAxisRotate) {
     mecanumDriveFieldRelative(xAxisSpeed, yAxisSpeed, zAxisRotate, m_gyro.getRotation2d());
+  }
+
+  public void mecanumDriveNoPid(double xAxisSpeed, double yAxisSpeed, double zAxisRotate){
+    m_mecanumDrive.driveCartesian(xAxisSpeed, yAxisSpeed, zAxisRotate);
   }
     
 
@@ -463,7 +520,7 @@ public class Drivetrain extends SubsystemBase {
    * @param newPose the pose the robot will get set to
    */
   public void resetPose(Pose2d newPose) {
-    resetEncoders();
+    //resetEncoders();
     //updateOdometry();
 
     m_odometry.resetPosition(

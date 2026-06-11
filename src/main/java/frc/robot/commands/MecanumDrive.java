@@ -6,6 +6,8 @@ package frc.robot.commands;
 
 import frc.robot.subsystems.Drivetrain;
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import java.util.function.Supplier;
 
@@ -47,11 +49,14 @@ public class MecanumDrive extends Command {
 
   public void execute() {
     double xSpeed = MathUtil.applyDeadband(m_xaxisSpeedSupplier.get(), OperatorConstants.kDeadband);
-    double rotSpeed = MathUtil.applyDeadband(m_zaxisRotateSupplier.get(), OperatorConstants.kDeadband);
     double ySpeed = MathUtil.applyDeadband(m_yaxisSpeedSupplier.get(), OperatorConstants.kDeadband);
-
+    double rotSpeed = MathUtil.applyDeadband(m_zaxisRotateSupplier.get(), OperatorConstants.kDeadband);
+    SmartDashboard.putNumber("JoystickXSpeed", xSpeed);
+    SmartDashboard.putNumber("JoystickYSpeed", ySpeed);
+    SmartDashboard.putNumber("JoystickZSpeed", rotSpeed);
     //System.out.println(xSpeed);
     m_drivetrain.mecanumDriveFieldRelative(xSpeed, ySpeed, rotSpeed);
+    //m_drivetrain.mecanumDriveNoPid(xSpeed, ySpeed, rotSpeed);
   }
 
   // Called once the command ends or is interrupted.

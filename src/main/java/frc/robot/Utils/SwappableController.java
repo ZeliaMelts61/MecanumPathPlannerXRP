@@ -2,9 +2,12 @@
 // Open Source Software; you can modify and/or share it under the terms of
 // the WPILib BSD license file in the root directory of this project.
 
-package frc.robot;
+package frc.robot.Utils;
 import static edu.wpi.first.units.Units.Seconds;
+
+import edu.wpi.first.math.jni.WPIMathJNI;
 import edu.wpi.first.math.util.Units;
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.units.TimeUnit;
 //import edu.wpi.first.wpilibj.Joystick;
 //import edu.wpi.first.wpilibj.XboxController;
@@ -18,11 +21,13 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.button.CommandGenericHID;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.wpilibj2.command.button.CommandJoystick;
 import java.util.Map;
 import java.util.Stack;
+import java.util.function.BooleanSupplier;
 import java.util.HashMap;
 //import java.util.EnumMap;
 
@@ -51,21 +56,23 @@ public class SwappableController {
           
           public Map<String, Integer> Buttons;
           public Map<String, Integer> Axes;
+          public Map<String, Double> AxesScale;
       }
   }
   
   /** Creates a new SwappableController. */
   private int port;
-  private int controllerConnectionTimeout = 5;
+  private int controllerConnectionTimeout = -1;
   private ControllerMappings.Controller currentControllerMappings;
   
-  public static final int kControllerConnectionTimeout = 5;
+  public static final int kControllerConnectionTimeout = -1;
   //private ConfigureBindings robotContainerConfigureBindings;
 
   private static ControllerMappings controllerMappings;
   private static Stack<EventLoop> myEventLoops = new Stack<>();
   private static ControllerSub controllerSub = null;
-  
+  private static double m_nextMessageTime;
+  private static int JOYSTICK_UNPLUGGED_MESSAGE_INTERVAL =1;
 
 
   public enum m_buttons {
@@ -76,8 +83,14 @@ public class SwappableController {
   public enum m_axes {
     kLeftX, kLeftY, kRightX, kRightY, kLeftTrigger, kRightTrigger, kThrottle
   }
+  /*
+  public enum m_axesScale {
+    kLeftX, kLeftY, kRightX, kRightY, kLeftTrigger, kRightTrigger, kThrottle
+  }
+  */
   Map<m_buttons, Integer> m_ButtonsMap = new HashMap<>();
   Map<m_axes, Integer> m_AxesMap = new HashMap<>();
+  Map<m_axes, Double> m_AxesScaleMap = new HashMap<>();
   
 
 
@@ -115,11 +128,12 @@ public class SwappableController {
 
     handleControllerChange();
     
-    this.automaticallyConfigureController().asProxy().beforeStarting(Commands.waitUntil(() -> {
+    CommandScheduler.getInstance().schedule(
+      this.automaticallyConfigureController().asProxy().beforeStarting(Commands.waitUntil(() -> {
       Command command = CommandScheduler.getInstance().requiring(controllerSub);
       return command == null || !command.isScheduled();
-    })
-    ).schedule();
+    }))
+    );
     
   }
 
@@ -139,31 +153,15 @@ public class SwappableController {
     myEventLoops.clear();
     CommandScheduler.getInstance().getDefaultButtonLoop().clear();
     CommandScheduler.getInstance().unregisterAllSubsystems();
-    System.out.println("Driverstation connected: " +DriverStation.waitForDsConnection(10));
-    /* 
-    int sleepTime = 0;
-    while (!DriverStation.isJoystickConnected(port)) {
-      CommandScheduler.getInstance().getDefaultButtonLoop().poll();
-      System.out.println("Waiting " + sleepTime + "s for joystick to connect on port: " + port);
-      try {
-        Thread.sleep(1000); // Wait for 1 second before checking again
-        if (++sleepTime > this.controllerConnectionTimeout) {
-          System.out.println("Joystick not connected after " + this.controllerConnectionTimeout + " seconds. Stopping wait.");
-          break;
-        }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt(); // Restore interrupted status
-      }
-    }
-    */
-    System.out.println("Handling controller change for port: " + port);
+    DriverStation.waitForDsConnection(10);
+    reportJoystickUnpluggedWarning("Handling controller change for port: " + port);
     
     if (DriverStation.getJoystickIsXbox(port)){
       this.activeController = (CommandXboxController) new CommandXboxController(port);
       remapButtons("Xbox");
     } else if (DriverStation.getJoystickName(port).toLowerCase().contains("extreme 3d pro")) {
       this.activeController = (CommandJoystick) new CommandJoystick(port);
-      remapButtons("extreme 3d pro");
+      remapButtons("Extreme 3d Pro");
     /* 
     } else if (DriverStation.getJoystickName(port).toLowerCase().contains("wireless gamepad")) {
       this.activeController = (CommandGenericHID) new CommandGenericHID(port);
@@ -175,12 +173,11 @@ public class SwappableController {
     } else{
       this.activeController = (CommandGenericHID) new CommandGenericHID(port); // Handle other types or invalid cases
       try {
-        remapButtons(DriverStation.getJoystickName(port).toLowerCase());
+        remapButtons(DriverStation.getJoystickName(port));
       } catch (Exception e) {
           if (e.getMessage().contains("Controller type not found")) {
               //CONTROLLER NOT FOUND
-              System.out.println(e.getMessage());
-              System.out.println("Controller type not recognized or unsupported. Using generic HID controller.");
+              DriverStation.reportWarning("Controller \""+DriverStation.getJoystickName(port)+"\" not connected or unsupported", false);
           } else {
               throw e; // Rethrow if it's a different exception
           }
@@ -193,13 +190,14 @@ public class SwappableController {
   }
 
   private void remapButtons(String controllerType) {
+    String controllerTypeLowercase = controllerType.toLowerCase();
     ControllerMappings.Controller controller = null;
     // Get the specific controller mappings from the in-memory data
     if (controllerType == "Xbox"){
         controller = controllerMappings.ControllerMappings.get("Xbox");
         this.currentControllerMappings = controller;
     } else{
-        controller = controllerMappings.ControllerMappings.get(controllerType);
+        controller = controllerMappings.ControllerMappings.get(controllerTypeLowercase);
         this.currentControllerMappings = controller;
         if (controller == null) {
             throw new IllegalArgumentException("Controller type not found: " + controllerType);
@@ -216,7 +214,7 @@ public class SwappableController {
         try {
             m_ButtonsMap.put(m_buttons.valueOf(entry.getKey()), entry.getValue());
         } catch (IllegalArgumentException e) {
-            System.out.println("Button " + entry.getKey() + " does not exist in this controller mapping.");
+            DriverStation.reportWarning("Button " + entry.getKey() + " does not exist in this controller mapping.", false);
             // Handle the case where the button does not exist in the mapping
             //m_ButtonsMap.put(m_buttons.valueOf(entry.getKey()), null);
         }
@@ -227,13 +225,34 @@ public class SwappableController {
         try {
             m_AxesMap.put(m_axes.valueOf(entry.getKey()), entry.getValue());
         } catch (IllegalArgumentException e) {
-            System.out.println("Axis " + entry.getKey() + " does not exist in this controller mapping.");
+            DriverStation.reportWarning("Axis " + entry.getKey() + " does not exist in this controller mapping.", false);
             // Handle the case where the axis does not exist in the mapping
             //m_AxesMap.put(m_axes.valueOf(entry.getKey()), null);
         }
     }
+
+    // Map axes Scale
+    for (Map.Entry<String, Double> entry : controller.AxesScale.entrySet()) {
+        try {
+            m_AxesScaleMap.put(m_axes.valueOf(entry.getKey()), entry.getValue());
+        } catch (IllegalArgumentException e) {
+            //DriverStation.reportWarning("Axis scale " + entry.getKey() + " does not exist in this controller mapping.", false);
+            // Handle the case where the axis scale does not exist in the mapping
+            //m_AxesScaleMap.put(m_axes.valueOf(entry.getKey()), 1.0);
+        }
+    }
     System.out.println("Buttons and axes sucessfully remapped for controller: " + controllerType + " on port: " + this.port);
-}
+  }
+
+  private static void reportJoystickUnpluggedWarning(String message) {
+    if (DriverStation.isFMSAttached() || !DriverStation.isJoystickConnectionWarningSilenced()) {
+      double currentTime = Timer.getTimestamp();
+      if (currentTime > m_nextMessageTime) {
+        DriverStation.reportWarning(message, false);
+        m_nextMessageTime = currentTime + JOYSTICK_UNPLUGGED_MESSAGE_INTERVAL;
+      }
+    }
+  }
 
   //only use the pov methods from this class, not the pov methods from the CommandGenericHID class as they won't work with all controllers
   public CommandGenericHID getActiveController() {
@@ -255,216 +274,259 @@ public class SwappableController {
     return activeController.isConnected();
   }
 
-  
+  private Trigger buttonFromMap(frc.robot.Utils.SwappableController.m_buttons button){
+    int buttonInd = m_ButtonsMap.getOrDefault(button, -1);
+    if (buttonInd==-1){
+      reportJoystickUnpluggedWarning(
+        "Joystick Button "
+            + button
+            + " on port "
+            + getPort()
+            + " not available, check if controller is plugged in");
+      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> false);
+    } else {
+      return activeController.button(buttonInd);
+    }
+  }
+
+  private Trigger buttonFromMap(frc.robot.Utils.SwappableController.m_buttons button, EventLoop eventLoop){
+    int buttonInd = m_ButtonsMap.getOrDefault(button, -1);
+    if (buttonInd==-1){
+      reportJoystickUnpluggedWarning(
+        "Joystick Button "
+            + button
+            + " on port "
+            + getPort()
+            + " not available, check if controller is plugged in");
+      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> false);
+    } else {
+      return activeController.button(buttonInd, eventLoop);
+    }
+  }
+
+  private double axisFromMap(frc.robot.Utils.SwappableController.m_axes axis){
+    int buttonInd = m_AxesMap.getOrDefault(axis, -1);
+    if (buttonInd==-1){
+      reportJoystickUnpluggedWarning(
+        "Joystick Axis "
+            + axis
+            + " on port "
+            + getPort()
+            + " not available, check if controller is plugged in");
+      return 0.0;
+    } else {
+      return MathUtil.clamp(activeController.getHID().getRawAxis(buttonInd) * m_AxesScaleMap.getOrDefault(axis, 1.0), -1.0, 1.0);
+    }
+  }
 
   public double getX() {
     
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftX, 25));
+    return axisFromMap(m_axes.kLeftX);
   }
 
   public double getY() {
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftY, 25));
+    return axisFromMap(m_axes.kLeftY);
   }
 
   public double getZ() {
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kRightX, 25));
+    return axisFromMap(m_axes.kRightX);
   }
 
   public Trigger a(){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kA, 25));
+    return buttonFromMap(m_buttons.kA);
   }
 
   public Trigger a(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kA, 25), eventLoop);
+    return buttonFromMap(m_buttons.kA, eventLoop);
   }
 
   public Trigger b(){
 
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kB, 25));
+    return buttonFromMap(m_buttons.kB);
   }
 
   public Trigger b(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kB, 25), eventLoop);
+    return buttonFromMap(m_buttons.kB, eventLoop);
   }
 
   public Trigger x(){
-   return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kX, 25));
+   return buttonFromMap(m_buttons.kX);
   }
 
   public Trigger x(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kX, 25), eventLoop);
+    return buttonFromMap(m_buttons.kX, eventLoop);
   }
 
   public Trigger y(){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kY, 25));
+    return buttonFromMap(m_buttons.kY);
   }
 
   public Trigger y(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kY, 25), eventLoop);
+    return buttonFromMap(m_buttons.kY, eventLoop);
   }
 
   public Trigger leftBumper() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kLeftBumper, 25));
+    return buttonFromMap(m_buttons.kLeftBumper);
   }
 
   public Trigger leftBumper(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kLeftBumper, 25), eventLoop);
+    return buttonFromMap(m_buttons.kLeftBumper, eventLoop);
   }
   public Trigger rightBumper() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kRightBumper, 25));
+    return buttonFromMap(m_buttons.kRightBumper);
   }
   public Trigger rightBumper(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kRightBumper, 25), eventLoop);
+    return buttonFromMap(m_buttons.kRightBumper, eventLoop);
   }
   public Trigger leftTrigger() {
     if (m_AxesMap.getOrDefault(m_axes.kLeftTrigger, null) == null) {
-      return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kLeftTriggerButton, 25));
+      return buttonFromMap(m_buttons.kLeftTriggerButton);
     } else {
-      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> 0.5<activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftTrigger, 25)));
+      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> 0.5<axisFromMap(m_axes.kLeftTrigger));
     }
   }
 
   public Trigger leftTrigger(double threshold) {
     if (m_AxesMap.getOrDefault(m_axes.kLeftTrigger, null) == null) {
-      return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kLeftTriggerButton, 25));
+      return buttonFromMap(m_buttons.kLeftTriggerButton);
     } else {
-      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> threshold<activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftTrigger, 25)));
+      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> threshold<axisFromMap(m_axes.kLeftTrigger));
     }
   }
 
   public Trigger leftTrigger(double threshold, EventLoop eventLoop) {
     if (m_AxesMap.getOrDefault(m_axes.kLeftTrigger, null) == null) {
-      return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kLeftTriggerButton, 25), eventLoop);
+      return buttonFromMap(m_buttons.kLeftTriggerButton, eventLoop);
     } else {
-      return new Trigger(eventLoop, () -> threshold<activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftTrigger, 25)));
+      return new Trigger(eventLoop, () -> threshold<axisFromMap(m_axes.kLeftTrigger));
     }
   }
 
   public Trigger rightTrigger() {
     if (m_AxesMap.getOrDefault(m_axes.kRightTrigger, null) == null) {
-      return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kRightTriggerButton, 25));
+      return buttonFromMap(m_buttons.kRightTriggerButton);
     } else {
-      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> 0.5<activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kRightTrigger, 25)));
+      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> 0.5<axisFromMap(m_axes.kRightTrigger));
     }
   }
 
   public Trigger rightTrigger(double threshold) {
     if (m_AxesMap.getOrDefault(m_axes.kRightTrigger, null) == null) {
-      return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kRightTriggerButton, 25));
+      return buttonFromMap(m_buttons.kRightTriggerButton);
     } else {
-      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> threshold<activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kRightTrigger, 25)));
+      return new Trigger(CommandScheduler.getInstance().getDefaultButtonLoop(), () -> threshold<axisFromMap(m_axes.kRightTrigger));
     }
   }
 
   public Trigger rightTrigger(double threshold, EventLoop eventLoop) {
     if (m_AxesMap.getOrDefault(m_axes.kRightTrigger, null) == null) {
-      return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kRightTriggerButton, 25), eventLoop);
+      return buttonFromMap(m_buttons.kRightTriggerButton, eventLoop);
     } else {
-      return new Trigger(eventLoop, () -> threshold<activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kRightTrigger, 25)));
+      return new Trigger(eventLoop, () -> threshold<axisFromMap(m_axes.kRightTrigger));
     }
   }
 
   public Trigger minus(){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMinus, 25));
+    return buttonFromMap(m_buttons.kMinus);
   }
 
   public Trigger minus(EventLoop eventLoop){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMinus, 25), eventLoop);
+    return buttonFromMap(m_buttons.kMinus, eventLoop);
   }
 
   public Trigger plus(){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kPlus, 25));
+    return buttonFromMap(m_buttons.kPlus);
   }
 
   public Trigger plus(EventLoop eventLoop){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kPlus, 25), eventLoop);
+    return buttonFromMap(m_buttons.kPlus, eventLoop);
   }
 
   public Trigger leftStick(){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kLeftStick, 25));
+    return buttonFromMap(m_buttons.kLeftStick);
   }
   
   public Trigger leftStick(EventLoop eventLoop){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kLeftStick, 25), eventLoop);
+    return buttonFromMap(m_buttons.kLeftStick, eventLoop);
   }
   public Trigger rightStick(){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kRightStick, 25));
+    return buttonFromMap(m_buttons.kRightStick);
   }
   public Trigger rightStick(EventLoop eventLoop){
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kRightStick, 25), eventLoop);
+    return buttonFromMap(m_buttons.kRightStick, eventLoop);
   }
 
   public double getRightX() {
     //Throttle on the joystick is the right X axis 
     if (m_AxesMap.getOrDefault(m_axes.kRightX, null) == null) {
-      return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kThrottle, 25));
+      return axisFromMap(m_axes.kThrottle);
     } else {
-      return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kRightX, 25));
+      return axisFromMap(m_axes.kRightX);
     }
   }
 
   public double getRightTriggerAxis(){
     if (m_AxesMap.getOrDefault(m_axes.kRightTrigger, null) == null) {
-      return (activeController.getHID().getRawButton(m_ButtonsMap.getOrDefault(m_buttons.kRightTriggerButton, 25)) ? 1.0 : 0.0);
+      return (buttonFromMap(m_buttons.kRightTriggerButton).getAsBoolean() ? 1.0 : 0.0);
     }
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kRightTrigger, 25));
+    return axisFromMap(m_axes.kRightTrigger);
   }
 
   public double getLeftTriggerAxis(){
     if (m_AxesMap.getOrDefault(m_axes.kLeftTrigger, null) == null) {
-      return (activeController.getHID().getRawButton(m_ButtonsMap.getOrDefault(m_buttons.kLeftTriggerButton, 25)) ? 1.0 : 0.0);
+      return (buttonFromMap(m_buttons.kLeftTriggerButton).getAsBoolean() ? 1.0 : 0.0);
     }
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftTrigger, 25));
+    return axisFromMap(m_axes.kLeftTrigger);
   }
   
   public Trigger home() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kHome, 25));
+    return buttonFromMap(m_buttons.kHome);
   }
   public Trigger home(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kHome, 25), eventLoop);
+    return buttonFromMap(m_buttons.kHome, eventLoop);
   }
   public Trigger capture() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kCapture, 25));
+    return buttonFromMap(m_buttons.kCapture);
   }
   public Trigger capture(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kCapture, 25), eventLoop);
+    return buttonFromMap(m_buttons.kCapture, eventLoop);
   }
   public Trigger mapableButton1() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton1, 25));
+    return buttonFromMap(m_buttons.kMapableButton1);
   }
   public Trigger mapableButton1(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton1, 25), eventLoop);
+    return buttonFromMap(m_buttons.kMapableButton1, eventLoop);
   }
   public Trigger mapableButton2() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton2, 25));
+    return buttonFromMap(m_buttons.kMapableButton2);
   }
   public Trigger mapableButton2(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton2, 25), eventLoop);
+    return buttonFromMap(m_buttons.kMapableButton2, eventLoop);
   }
   public Trigger mapableButton3() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton3, 25));
+    return buttonFromMap(m_buttons.kMapableButton3);
   }
   public Trigger mapableButton3(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton3, 25), eventLoop);
+    return buttonFromMap(m_buttons.kMapableButton3, eventLoop);
   }
   public Trigger mapableButton4() {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton4, 25));
+    return buttonFromMap(m_buttons.kMapableButton4);
   }
   public Trigger mapableButton4(EventLoop eventLoop) {
-    return activeController.button(m_ButtonsMap.getOrDefault(m_buttons.kMapableButton4, 25), eventLoop);
+    return buttonFromMap(m_buttons.kMapableButton4, eventLoop);
   }
   public double getLeftX() {
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftX, 25));
+    return axisFromMap(m_axes.kLeftX);
   }
   public double getLeftY() {
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kLeftY, 25));
+    return axisFromMap(m_axes.kLeftY);
   }
   public double getRightY() {
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kRightY, 25));
+    return axisFromMap(m_axes.kRightY);
   }
 
   public double getThrottle() {
-    return activeController.getHID().getRawAxis(m_AxesMap.getOrDefault(m_axes.kThrottle, 25));
+    return axisFromMap(m_axes.kThrottle);
   }
 
   public Trigger povUp() {
@@ -571,10 +633,11 @@ public class SwappableController {
         return -1;
     
     } catch (NullPointerException e) {
-        System.out.println("Button mapping not found for POV buttons. Returning -1 (non-pressed state)");
-        return -1; // If the button mapping is not found, return -1
+      reportJoystickUnpluggedWarning("Button mapping not found for POV buttons. Returning -1 (non-pressed state)");
     }
-}
+      return -1; // If the button mapping is not found, return -1
+  }
+
 
   public Trigger pov(int angle) {
     return pov(angle, CommandScheduler.getInstance().getDefaultButtonLoop());
@@ -620,13 +683,13 @@ public class SwappableController {
     }
     @Override
     public void initialize() {
-      controller.handleControllerChange();
+      //controller.handleControllerChange();
     }
     @Override
     public void execute() {
-      if (!controller.controlerIsValid()) {
-        controller.handleControllerChange();
-      }
+      
+      controller.handleControllerChange();
+      
     }
     @Override
     public boolean isFinished() {
@@ -635,7 +698,7 @@ public class SwappableController {
     @Override
     public void end(boolean interrupted) {
       if (interrupted) {
-        System.out.println("SwappableControllerAutoConfigure command was interrupted.");
+        DriverStation.reportWarning("Controller on port " + controller.getPort() + " was not configured", false);
       } else {
         controllerSub.robotContainerConfigureBindings.configureBindings();
       }
@@ -652,6 +715,9 @@ public class SwappableController {
   }
   //use this::ConfigureBindings in robotContainer for robotContainerConfigureBindings
   public Command automaticallyConfigureController(double timeout) {
+    if (timeout==-1){
+      return new automaticallyConfigureController(this, controllerSub).ignoringDisable(true);
+    }
     return new automaticallyConfigureController(this, controllerSub).ignoringDisable(true).withTimeout(timeout);
   }
 }

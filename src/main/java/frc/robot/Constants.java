@@ -85,9 +85,10 @@ public final class Constants {
     public static final double kS = 0.1;
     public static final double kV = 2.2;
 
-    public static final double kMaxLinearXSpeedMPS = 0.06; //in meters per second
-    public static final double kMaxLinearYSpeedMPS = 0.05; //in meters per second
-    public static final double kMaxAngularSpeedRPS = 7.50492; //in radians per second
+    public static final double kMaxLinearXSpeedMPS = 0.6; //in meters per second
+    public static final double kMaxLinearYSpeedMPS = 0.5; //in meters per second
+    public static final double kMaxAngularSpeedRPS = 75.0492; //in radians per second
+
 
   
   }
