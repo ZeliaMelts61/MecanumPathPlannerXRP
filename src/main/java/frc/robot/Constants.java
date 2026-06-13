@@ -27,10 +27,12 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 public final class Constants {
   public static class OperatorConstants {
     public static final int kDriverControllerPort = 0;
-    public static final double kDeadband = 0.1;
+    public static final double kDeadband = 0.2;
   }
   public static class ArmConstants {
-    public static final boolean kInverted = true;
+    public static final boolean kInverted = false;
+    public static final double kMinOutput = 0.2;
+    public static final double kMaxOutput = 0.9;
   }
   public static class RangefinderConstants {
     public static final double kLocationX = 0; //meters from the center of the robot
@@ -51,17 +53,17 @@ public final class Constants {
     //public static final double TRACK_WIDTH_IN_METERS = 0.155; 
 
     // Mecanum wheel locations 
-    public static final double kFrontLeftLocationX = 0.0;
-    public static final double kFrontLeftLocationY = 0.0;
+    public static final double kFrontLeftLocationX = 0.11875; //meters
+    public static final double kFrontLeftLocationY = 0.08; //meters 
 
-    public static final double kFrontRightLocationX = 0.0;
-    public static final double kFrontRightLocationY = 0.0;
+    public static final double kFrontRightLocationX = 0.11875; //meters
+    public static final double kFrontRightLocationY = -0.08; //meters
 
-    public static final double kBackLeftLocationX = 0.0;
-    public static final double kBackLeftLocationY = 0.0;
+    public static final double kBackLeftLocationX = -0.11875; //meters
+    public static final double kBackLeftLocationY = 0.08; //meters
 
-    public static final double kBackRightLocationX = 0.0;
-    public static final double kBackRightLocationY = 0.0;
+    public static final double kBackRightLocationX = -0.11875; //meters
+    public static final double kBackRightLocationY = -0.08; //meters
 
     public static final Translation2d kFrontLeftLocation = new Translation2d(kFrontLeftLocationX, kFrontLeftLocationY);
     public static final Translation2d kFrontRightLocation = new Translation2d(kFrontRightLocationX, kFrontRightLocationY);
@@ -87,7 +89,7 @@ public final class Constants {
 
     public static final double kMaxLinearXSpeedMPS = 0.6; //in meters per second
     public static final double kMaxLinearYSpeedMPS = 0.5; //in meters per second
-    public static final double kMaxAngularSpeedRPS = 75.0492; //in radians per second
+    public static final double kMaxAngularSpeedRPS = 7.50492; //in radians per second
 
 
   

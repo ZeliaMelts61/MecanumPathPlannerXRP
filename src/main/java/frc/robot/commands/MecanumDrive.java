@@ -55,7 +55,7 @@ public class MecanumDrive extends Command {
     SmartDashboard.putNumber("JoystickYSpeed", ySpeed);
     SmartDashboard.putNumber("JoystickZSpeed", rotSpeed);
     //System.out.println(xSpeed);
-    m_drivetrain.mecanumDriveFieldRelative(xSpeed, ySpeed, rotSpeed);
+    m_drivetrain.mecanumDriveRobotRelative(xSpeed, ySpeed, rotSpeed);
     //m_drivetrain.mecanumDriveNoPid(xSpeed, ySpeed, rotSpeed);
   }
 

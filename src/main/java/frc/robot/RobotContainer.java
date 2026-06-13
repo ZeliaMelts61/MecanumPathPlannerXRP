@@ -58,7 +58,6 @@ public class RobotContainer {
   public RobotContainer() {
 
     // Configure the button bindings
-    new RslCommand(m_rsl);
     m_chooser=AutoBuilder.buildAutoChooser();
     configureButtonBindings();
   }
@@ -70,6 +69,7 @@ public class RobotContainer {
    * edu.wpi.first.wpilibj2.command.button.JoystickButton}.
    */
   private void configureButtonBindings() {
+    new RslCommand(m_rsl);
     //CommandScheduler.getInstance().schedule(new PrintCommand(String.valueOf(m_drivetrain.maxAccX)).repeatedly());
     
     m_arm.setAngle(80);
@@ -129,6 +129,6 @@ public class RobotContainer {
    */
   public Command getMecanumDriveCommand() {
     return new MecanumDrive(
-        m_drivetrain, () -> -m_controller.getLeftY(), () -> m_controller.getLeftX(), () -> -m_controller.getRightX());
+        m_drivetrain, () -> -m_controller.getLeftY(), () -> -m_controller.getLeftX(), () -> -m_controller.getRightX());
   }
 }

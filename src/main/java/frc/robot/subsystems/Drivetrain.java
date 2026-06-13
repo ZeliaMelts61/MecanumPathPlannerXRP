@@ -91,7 +91,7 @@ public class Drivetrain extends SubsystemBase {
   private final MecanumDrive m_mecanumDrive = new MecanumDrive(
     m_frontLeftMotor::set, m_frontRightMotor::set,
     m_backLeftMotor::set, m_backRightMotor::set
-);
+  );
 
   // Set up the XRPGyro
   private final XRPGyro m_gyro = new XRPGyro();
@@ -161,14 +161,14 @@ public class Drivetrain extends SubsystemBase {
   private final AnalogInput analog15 = new AnalogInput(15);
   private final AnalogInput analog16 = new AnalogInput(16);
   */
-  
+   
 
   /** Creates a new Drivetrain. */
   public Drivetrain() {
     
 
     //this sets the tolerance for the pid controllers so that they don't wiggle at low speeds
-    m_drivePID.setTolerance(0.02);
+    m_drivePID.setTolerance(0.09);
 
 
     SendableRegistry.addChild(m_mecanumDrive, m_frontLeftMotor);
@@ -342,10 +342,10 @@ public class Drivetrain extends SubsystemBase {
       m_field.getObject("targetPose").setPose(targetPose);
     });
     
-    
+  
     if (!(m_lastTimeTargetPoseWasUpdated+2>Timer.getTimestamp())&&!m_hasRemovedTargetPoseAndPath){
       m_hasRemovedTargetPoseAndPath=true;
-      System.out.println(m_lastTimeTargetPoseWasUpdated);
+      //System.out.println(m_lastTimeTargetPoseWasUpdated);
       m_field.getObject("targetPose").setPoses();
       m_field.getObject("active path trajectory").setPoses();
       m_pathPoses.clear();
@@ -399,6 +399,8 @@ public class Drivetrain extends SubsystemBase {
   public void mecanumDriveRobotRelative(ChassisSpeeds speeds) {
     // Convert ChassisSpeeds to individual wheel speeds
     MecanumDriveWheelSpeeds wheelSpeeds = m_kinematics.toWheelSpeeds(speeds);
+    
+
     // Apply speeds to your motor controllers (e.g., using velocity PID)
     wheelSpeeds.desaturate(DrivetrainConstants.kMaxLinearYSpeedMPS);
     this.setWheelSpeeds(wheelSpeeds);
@@ -420,7 +422,7 @@ public class Drivetrain extends SubsystemBase {
             yAxisSpeed * DrivetrainConstants.kMaxLinearYSpeedMPS,
             zAxisRotate * DrivetrainConstants.kMaxAngularSpeedRPS,
             gyroAngle);
-
+    
     mecanumDriveRobotRelative(speeds);
   }
 
@@ -486,6 +488,7 @@ public class Drivetrain extends SubsystemBase {
     m_frontRightMotor.set(frontRightOutput);
     m_backLeftMotor.set(backLeftOutput);
     m_backRightMotor.set(backRightOutput);
+    m_mecanumDrive.feed();
   }
 
   /**
