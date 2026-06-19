@@ -35,12 +35,23 @@ import edu.wpi.first.math.trajectory.ExponentialProfile.State;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.networktables.NetworkTablesJNI;
 import edu.wpi.first.units.measure.Time;
+import edu.wpi.first.units.measure.Voltage;
+
+import static edu.wpi.first.units.Units.Meters;
+import static edu.wpi.first.units.Units.MetersPerSecond;
+import static edu.wpi.first.units.Units.Radians;
+import static edu.wpi.first.units.Units.RadiansPerSecond;
+import static edu.wpi.first.units.Units.Second;
+import static edu.wpi.first.units.Units.Seconds;
+import static edu.wpi.first.units.Units.Volts;
 import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.util.sendable.SendableRegistry;
 import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj.BuiltInAccelerometer;
+import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.drive.MecanumDrive;
@@ -51,11 +62,15 @@ import edu.wpi.first.wpilibj.smartdashboard.Mechanism2d;
 import edu.wpi.first.wpilibj.smartdashboard.MechanismLigament2d;
 import edu.wpi.first.wpilibj.smartdashboard.MechanismRoot2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj.sysid.SysIdRoutineLog;
 //import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.xrp.XRPGyro;
 import edu.wpi.first.wpilibj.xrp.XRPMotor;
 import edu.wpi.first.wpilibj.xrp.XRPOnBoardIO;
+import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import edu.wpi.first.math.controller.DifferentialDriveFeedforward;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.hal.simulation.RoboRioDataJNI;
 import edu.wpi.first.math.MathUtil;
@@ -65,6 +80,8 @@ import frc.robot.RobotContainer;
 import frc.robot.Constants.DrivetrainConstants;
 import frc.robot.Constants.PathplannerConstants;
 import frc.robot.Robot;
+import frc.robot.Utils.MecanumDriveFeedforward;
+import frc.robot.Utils.MecanumDriveFeedforward.MecanumDriveWheelVoltages;
 
 public class Drivetrain extends SubsystemBase {
   // The XRP has the left and right motors set to
@@ -101,10 +118,10 @@ public class Drivetrain extends SubsystemBase {
 
   //Create kinematics
   private final MecanumDriveKinematics m_kinematics = new MecanumDriveKinematics(
-      DrivetrainConstants.kFrontLeftLocation,
-      DrivetrainConstants.kFrontRightLocation,
-      DrivetrainConstants.kBackLeftLocation,
-      DrivetrainConstants.kBackRightLocation
+      DrivetrainConstants.WheelLocationConstants.kFrontLeftLocation,
+      DrivetrainConstants.WheelLocationConstants.kFrontRightLocation,
+      DrivetrainConstants.WheelLocationConstants.kBackLeftLocation,
+      DrivetrainConstants.WheelLocationConstants.kBackRightLocation
   );
 
   private ChassisSpeeds m_chassisSpeeds = new ChassisSpeeds(0, 0, 0);
@@ -129,8 +146,96 @@ public class Drivetrain extends SubsystemBase {
   private final Field2d m_field = new Field2d();
 
   //pids 
-  private final PIDController m_drivePID = new PIDController(DrivetrainConstants.kP, DrivetrainConstants.kI, DrivetrainConstants.kD);
+  //private final PIDController m_drivePID = new PIDController(DrivetrainConstants.kP, DrivetrainConstants.kI, DrivetrainConstants.kD);
   
+  
+  private final PIDController m_frontLeftPIDController = new PIDController(
+    DrivetrainConstants.PIDConstants.FrontLeftPID.kP,
+    DrivetrainConstants.PIDConstants.FrontLeftPID.kI,
+    DrivetrainConstants.PIDConstants.FrontLeftPID.kD
+  );
+
+  private final PIDController m_frontRightPIDController = new PIDController(
+    DrivetrainConstants.PIDConstants.FrontRightPID.kP,
+    DrivetrainConstants.PIDConstants.FrontRightPID.kI,
+    DrivetrainConstants.PIDConstants.FrontRightPID.kD
+  );
+
+  private final PIDController m_backLeftPIDController = new PIDController(
+    DrivetrainConstants.PIDConstants.BackLeftPID.kP,
+    DrivetrainConstants.PIDConstants.BackLeftPID.kI,
+    DrivetrainConstants.PIDConstants.BackLeftPID.kD
+  );
+
+  private final PIDController m_backRightPIDController = new PIDController(
+    DrivetrainConstants.PIDConstants.BackRightPID.kP,
+    DrivetrainConstants.PIDConstants.BackRightPID.kI,
+    DrivetrainConstants.PIDConstants.BackRightPID.kD
+  );
+
+
+/* 
+  private final SimpleMotorFeedforward m_frontLeftTranslateFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.FrontLeftFF.kS,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.FrontLeftFF.kV,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.FrontLeftFF.kA
+  );
+
+  private final SimpleMotorFeedforward m_frontRightTranslateFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.FrontRightFF.kS,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.FrontRightFF.kV,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.FrontRightFF.kA
+  );
+
+  private final SimpleMotorFeedforward m_backLeftTranslateFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.BackLeftFF.kS,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.BackLeftFF.kV,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.BackLeftFF.kA
+  );
+
+  private final SimpleMotorFeedforward m_backRightTranslateFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.BackRightFF.kS,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.BackRightFF.kV,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.BackRightFF.kA
+  );
+
+
+  private final SimpleMotorFeedforward m_frontLeftStrafeFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.FrontLeftFF.kS,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.FrontLeftFF.kV,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.FrontLeftFF.kA
+  );
+
+  private final SimpleMotorFeedforward m_frontRightStrafeFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.FrontRightFF.kS,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.FrontRightFF.kV,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.FrontRightFF.kA
+  );
+
+  private final SimpleMotorFeedforward m_backLeftStrafeFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.BackLeftFF.kS,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.BackLeftFF.kV,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.BackLeftFF.kA
+  );
+
+  private final SimpleMotorFeedforward m_backRightStrafeFF = new SimpleMotorFeedforward(
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.BackRightFF.kS,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.BackRightFF.kV,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.BackRightFF.kA
+  );
+
+*/
+  //DifferentialDriveFeedforward a = new DifferentialDriveFeedforward(getAverageDistanceInch(), getAccelZ(), getAccelY(), getAccelX());
+  MecanumDriveFeedforward m_mecanumDriveFeedforward = new MecanumDriveFeedforward(
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.kV,
+    DrivetrainConstants.FeedforwardConstants.TranslateFF.kA,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.kV,
+    DrivetrainConstants.FeedforwardConstants.StrafeFF.kA,
+    DrivetrainConstants.FeedforwardConstants.RotateFF.kV,
+    DrivetrainConstants.FeedforwardConstants.RotateFF.kA,
+    m_kinematics
+  );
+
   private final SimpleMotorFeedforward m_feedforward = new SimpleMotorFeedforward(DrivetrainConstants.kS, DrivetrainConstants.kV);
 
 
@@ -142,33 +247,21 @@ public class Drivetrain extends SubsystemBase {
 
   private final AnalogInput m_vinPin = new AnalogInput(0);
 
-  //private final AnalogInput analog0  = new AnalogInput(0);
-  /* 
-  private final AnalogInput analog1  = new AnalogInput(1);
-  private final AnalogInput analog2  = new AnalogInput(2);
-  private final AnalogInput analog3  = new AnalogInput(3);
-  private final AnalogInput analog4  = new AnalogInput(4);
-  private final AnalogInput analog5  = new AnalogInput(5);
-  private final AnalogInput analog6  = new AnalogInput(6);
-  private final AnalogInput analog7  = new AnalogInput(7);
-  private final AnalogInput analog8  = new AnalogInput(8);
-  private final AnalogInput analog9  = new AnalogInput(9);
-  private final AnalogInput analog10 = new AnalogInput(10);
-  private final AnalogInput analog11 = new AnalogInput(11);
-  private final AnalogInput analog12 = new AnalogInput(12);
-  private final AnalogInput analog13 = new AnalogInput(13);
-  private final AnalogInput analog14 = new AnalogInput(14);
-  private final AnalogInput analog15 = new AnalogInput(15);
-  private final AnalogInput analog16 = new AnalogInput(16);
-  */
-   
+  
+
+  
+
+
+  private double m_lastSysIdVoltage;
+  private int SysidMode;
 
   /** Creates a new Drivetrain. */
   public Drivetrain() {
-    
-
     //this sets the tolerance for the pid controllers so that they don't wiggle at low speeds
-    m_drivePID.setTolerance(0.09);
+    m_frontLeftPIDController.setTolerance(0.04);
+    m_frontRightPIDController.setTolerance(0.04);
+    m_backLeftPIDController.setTolerance(0.04);
+    m_backRightPIDController.setTolerance(0.04);
 
 
     SendableRegistry.addChild(m_mecanumDrive, m_frontLeftMotor);
@@ -193,9 +286,8 @@ public class Drivetrain extends SubsystemBase {
     m_backRightEncoder.setReverseDirection(true);
 
     resetEncoders();
-
-    //SmartDashboard.putData("Translation PID", DrivetrainConstants.kTranslationPID);
-
+    resetPose();
+    createDashboardWidgets();
 
     // configure autobuilder for pathplanner
 
@@ -261,24 +353,31 @@ public class Drivetrain extends SubsystemBase {
 
   public void createDashboardWidgets(){
     SmartDashboard.putData("Mecanum", builder -> {
-        builder.setSmartDashboardType("SwerveDrive");
+      builder.setSmartDashboardType("SwerveDrive");
 
-        builder.addDoubleProperty("Front Left Angle", () -> 45, null);
-        builder.addDoubleProperty("Front Left Velocity", () -> m_wheelSpeeds.frontLeftMetersPerSecond, null);
+      builder.addDoubleProperty("Front Left Angle", () -> 0.0, null);
+      builder.addDoubleProperty("Front Left Velocity", () -> m_wheelSpeeds.frontLeftMetersPerSecond * 10, null);
 
-        builder.addDoubleProperty("Front Right Angle", () -> -45, null);
-        builder.addDoubleProperty("Front Right Velocity", () -> 8, null);
+      builder.addDoubleProperty("Front Right Angle", () -> 0.0, null);
+      builder.addDoubleProperty("Front Right Velocity", () -> m_wheelSpeeds.frontRightMetersPerSecond * 10, null);
 
-        builder.addDoubleProperty("Back Left Angle", () -> 135, null);
-        builder.addDoubleProperty("Back Left Velocity", () -> m_wheelSpeeds.rearLeftMetersPerSecond, null);
+      builder.addDoubleProperty("Back Left Angle", () -> 0.0, null);
+      builder.addDoubleProperty("Back Left Velocity", () ->  m_wheelSpeeds.rearLeftMetersPerSecond * 10, null);
 
-        builder.addDoubleProperty("Back Right Angle", () -> 225, null);
-        builder.addDoubleProperty("Back Right Velocity", () -> m_wheelSpeeds.rearRightMetersPerSecond, null);
+      builder.addDoubleProperty("Back Right Angle", () -> 0.0, null);
+      builder.addDoubleProperty("Back Right Velocity", () -> m_wheelSpeeds.rearRightMetersPerSecond * 10, null);
 
-        builder.addDoubleProperty("Robot Angle", () -> m_gyro.getRotation2d().getRadians(), null);
+      builder.addDoubleProperty("Robot Angle", () -> m_pose.getRotation().getRadians(), null);
     });
 
-    SmartDashboard.putData("Drive Pid", m_drivePID);
+    
+
+    SmartDashboard.putData("Front Left Pid", m_frontLeftPIDController);
+    SmartDashboard.putData("Front Right Pid", m_frontRightPIDController);
+    SmartDashboard.putData("Back Left Pid", m_backLeftPIDController);
+    SmartDashboard.putData("Back Right Pid", m_backRightPIDController);
+
+    SmartDashboard.putNumber("Drive Speed", 1);
   }
 
   public void updateDashboardWidgets(){
@@ -290,34 +389,23 @@ public class Drivetrain extends SubsystemBase {
     SmartDashboard.putBoolean("Robot Connected", DriverStation.isDSAttached());
     SmartDashboard.putBoolean("Robot is About to explode", velocity>DrivetrainConstants.kMaxLinearXSpeedMPS);
     //RoboRioSim.getVInVoltage();
-    double actualVoltage = m_vinPin.getVoltage() * 4.03;
+    
+    double actualVoltage = m_vinPin.getVoltage() /** 4.03*/;
     SmartDashboard.putNumber("Voltage?", actualVoltage);
     SmartDashboard.putData("Front Left Encoder",m_frontLeftEncoder);
     SmartDashboard.putData("Front Right Encoder",m_frontRightEncoder);
     SmartDashboard.putData("Back Left Encoder",m_backLeftEncoder);
     SmartDashboard.putData("Back Right Encoder",m_backRightEncoder);
-    /* 
-    SmartDashboard.putNumberArray("AnalogPins", new double[]{
-      analog0.getVoltage(), 
-      analog1.getVoltage(), 
-      analog2.getVoltage(), 
-      analog3.getVoltage(), 
-      analog4.getVoltage(), 
-      analog5.getVoltage(), 
-      analog6.getVoltage(), 
-      analog7.getVoltage(), 
-      analog8.getVoltage(), 
-      analog9.getVoltage(), 
-      analog10.getVoltage(),
-      analog11.getVoltage(),
-      analog12.getVoltage(),
-      analog13.getVoltage(),
-      analog14.getVoltage(),
-      analog15.getVoltage(),
-      analog16.getVoltage(),
-    });
-    */
+    
+    SmartDashboard.putData("Drive", m_mecanumDrive);
 
+    //ArrayList<Boolean> values = new ArrayList<Boolean>();
+    // digitalInputs.forEach((input) -> {
+    //   values.add(input.isAnalogTrigger());
+    // });
+    
+
+    //SmartDashboard.putString("digital", Arrays.toString(values.toArray()));
   }
 
   /* Updates the Path and TargetPose on the field widget on the dashboard */
@@ -350,7 +438,6 @@ public class Drivetrain extends SubsystemBase {
       m_field.getObject("active path trajectory").setPoses();
       m_pathPoses.clear();
     }
-    SmartDashboard.putData("Drive", m_mecanumDrive);
   }
     
   public void resetAll(){
@@ -368,11 +455,16 @@ public class Drivetrain extends SubsystemBase {
    * @param zAxisRotate Desired rotation Speed for the robot (-1.0 to 1.0).
    */
   public void mecanumDriveRobotRelative(double xAxisSpeed, double yAxisSpeed, double zAxisRotate) {
+    if(allEqualZero(xAxisSpeed, yAxisSpeed, zAxisRotate)){
+      stop();
+      return;
+    }
     ChassisSpeeds speeds = new ChassisSpeeds(
-        xAxisSpeed * DrivetrainConstants.kMaxLinearXSpeedMPS,
-        yAxisSpeed * DrivetrainConstants.kMaxLinearYSpeedMPS,
-        zAxisRotate * DrivetrainConstants.kMaxAngularSpeedRPS);
-    mecanumDriveRobotRelative(speeds);
+      xAxisSpeed * DrivetrainConstants.kMaxLinearXSpeedMPS * SmartDashboard.getNumber("Drive Speed", 1),
+      yAxisSpeed * DrivetrainConstants.kMaxLinearYSpeedMPS * SmartDashboard.getNumber("Drive Speed", 1),
+      zAxisRotate * DrivetrainConstants.kMaxAngularSpeedRPS * SmartDashboard.getNumber("Drive Speed", 1));
+    mecanumDriveRobotRelative(speeds, true);
+  
   }
 
   /**
@@ -383,11 +475,16 @@ public class Drivetrain extends SubsystemBase {
    * @param zAxisRotate Desired rotation Speed for the robot (-1.0 to 1.0).
    */
   public void arcadeDrive(double xAxisSpeed, double zAxisRotate) {
+    if(allEqualZero(xAxisSpeed, zAxisRotate)){
+      stop();
+      return;
+    }
+    
     ChassisSpeeds speeds = new ChassisSpeeds(
         xAxisSpeed * DrivetrainConstants.kMaxLinearXSpeedMPS,
         0,
         zAxisRotate * DrivetrainConstants.kMaxAngularSpeedRPS);
-    mecanumDriveRobotRelative(speeds);
+    mecanumDriveRobotRelative(speeds, true);
   }
   
 
@@ -396,17 +493,15 @@ public class Drivetrain extends SubsystemBase {
    * It will desaturate the wheel speeds automatically.
    * @param speeds The ChassisSpeeds you want the robot to move at. 
    */
-  public void mecanumDriveRobotRelative(ChassisSpeeds speeds) {
-    // Convert ChassisSpeeds to individual wheel speeds
-    MecanumDriveWheelSpeeds wheelSpeeds = m_kinematics.toWheelSpeeds(speeds);
-    
-
-    // Apply speeds to your motor controllers (e.g., using velocity PID)
-    wheelSpeeds.desaturate(DrivetrainConstants.kMaxLinearYSpeedMPS);
-    this.setWheelSpeeds(wheelSpeeds);
+  public void mecanumDriveRobotRelative(ChassisSpeeds speeds, boolean fromJoystick) {
+    MecanumDriveWheelSpeeds targetSpeeds = m_kinematics.toWheelSpeeds(speeds);
+    setWheelSpeeds(targetSpeeds, speeds, fromJoystick);
   }
 
-
+  public void mecanumDriveRobotRelative(ChassisSpeeds speeds) {
+    mecanumDriveRobotRelative(speeds, false); 
+  }
+  
   /**
    * Drive Field Relative using mecanum drive, Uses pids for more accurate control.
    * It will desaturate the wheel speeds automatically
@@ -416,6 +511,10 @@ public class Drivetrain extends SubsystemBase {
    * @param gyroAngle The rotation 2d of the robot.
    */
   public void mecanumDriveFieldRelative(double xAxisSpeed, double yAxisSpeed, double zAxisRotate, Rotation2d gyroAngle) {
+    if(allEqualZero(xAxisSpeed,yAxisSpeed,zAxisRotate)){
+      stop();
+      return;
+    }
     ChassisSpeeds speeds =
         ChassisSpeeds.fromFieldRelativeSpeeds(
             xAxisSpeed * DrivetrainConstants.kMaxLinearXSpeedMPS,
@@ -423,8 +522,9 @@ public class Drivetrain extends SubsystemBase {
             zAxisRotate * DrivetrainConstants.kMaxAngularSpeedRPS,
             gyroAngle);
     
-    mecanumDriveRobotRelative(speeds);
+    mecanumDriveRobotRelative(speeds, true);
   }
+  
 
   /**
    * Drive Field Relative using mecanum drive.
@@ -460,45 +560,72 @@ public class Drivetrain extends SubsystemBase {
    * 
    * @param targetSpeeds Desired wheel speeds for each mecanum wheel.
   */
-  private void setWheelSpeeds(MecanumDriveWheelSpeeds targetSpeeds) {
+  private void setWheelSpeeds(MecanumDriveWheelSpeeds targetSpeeds, ChassisSpeeds targetChassisSpeeds, boolean fromJoystick) {
     targetSpeeds.desaturate(DrivetrainConstants.kMaxLinearXSpeedMPS);
+    MecanumDriveWheelVoltages wheelVoltagesFF;
+    if(fromJoystick) {
+      wheelVoltagesFF = m_mecanumDriveFeedforward.calculateWithoutkA(m_chassisSpeeds, targetChassisSpeeds, 0.02);
+    } else {
+      wheelVoltagesFF = m_mecanumDriveFeedforward.calculate(m_chassisSpeeds, targetChassisSpeeds, 0.02);
+    }
+
     double frontLeftPIDOut =
-        m_drivePID.calculate(
+        m_frontLeftPIDController.calculate(
             m_wheelSpeeds.frontLeftMetersPerSecond,
             targetSpeeds.frontLeftMetersPerSecond);
     double frontRightPIDOut = 
-        m_drivePID.calculate(
+        m_frontRightPIDController.calculate(
                 m_wheelSpeeds.frontRightMetersPerSecond,
                 targetSpeeds.frontRightMetersPerSecond);
     double backLeftPIDOut =
-        m_drivePID.calculate(
+        m_backLeftPIDController.calculate(
             m_wheelSpeeds.rearLeftMetersPerSecond,
             targetSpeeds.rearLeftMetersPerSecond);
     double backRightPIDOut =
-        m_drivePID.calculate(
+        m_backRightPIDController.calculate(
             m_wheelSpeeds.rearRightMetersPerSecond,
             targetSpeeds.rearRightMetersPerSecond);
     
-    double frontLeftOutput = MathUtil.clamp(m_feedforward.calculate(targetSpeeds.frontLeftMetersPerSecond) + frontLeftPIDOut, -1.0, 1.0);
-    double frontRightOutput = MathUtil.clamp(m_feedforward.calculate(targetSpeeds.frontRightMetersPerSecond) + frontRightPIDOut, -1.0, 1.0);
-    double backLeftOutput = MathUtil.clamp(m_feedforward.calculate(targetSpeeds.rearLeftMetersPerSecond) + backLeftPIDOut, -1.0, 1.0);
-    double backRightOutput = MathUtil.clamp(m_feedforward.calculate(targetSpeeds.rearRightMetersPerSecond) + backRightPIDOut, -1.0, 1.0);
 
-    m_frontLeftMotor.set(frontLeftOutput);
-    m_frontRightMotor.set(frontRightOutput);
-    m_backLeftMotor.set(backLeftOutput);
-    m_backRightMotor.set(backRightOutput);
-    m_mecanumDrive.feed();
+    double frontLeftOutput = wheelVoltagesFF.frontLeft() + frontLeftPIDOut;
+    double frontRightOutput = wheelVoltagesFF.frontRight() + frontRightPIDOut;
+    double backLeftOutput = wheelVoltagesFF.rearLeft() + backLeftPIDOut;
+    double backRightOutput = wheelVoltagesFF.rearRight() + backRightPIDOut;
+
+    double maxVolt = Math.max(
+      Math.max(Math.abs(frontLeftOutput), Math.abs(frontRightOutput)),
+      Math.max(Math.abs(backLeftOutput), Math.abs(backRightOutput))
+    );
+
+
+    if (maxVolt > 12.0) {
+      double scale = 12.0 / maxVolt;
+      frontLeftOutput *= scale;
+      frontRightOutput *= scale;
+      backLeftOutput *= scale;
+      backRightOutput *= scale;
+    }
+    
+    m_frontLeftMotor.setVoltage(frontLeftOutput);
+    m_frontRightMotor.setVoltage(frontRightOutput);
+    m_backLeftMotor.setVoltage(backLeftOutput);
+    m_backRightMotor.setVoltage(backRightOutput);
+    m_mecanumDrive.feed(); // oooooh free food............
   }
+  
 
   /**
    * Stops the drivetrain by setting all motor powers to 0.
    */
   public void stop(){
-    m_frontLeftMotor.set(0);
-    m_frontRightMotor.set(0);
-    m_backLeftMotor.set(0);
-    m_backRightMotor.set(0);
+    mecanumDriveRobotRelative(new ChassisSpeeds());
+    m_frontLeftMotor.stopMotor();
+    m_frontRightMotor.stopMotor();
+    m_backLeftMotor.stopMotor();
+    m_backRightMotor.stopMotor();
+
+    SmartDashboard.putBoolean("Stopped", true);
+    m_mecanumDrive.feed();
   }
     
 
@@ -745,5 +872,130 @@ public class Drivetrain extends SubsystemBase {
     updateDashboardWidgets();
   }
 
+  private static boolean allEqualZero(double... nums){
+    for(double num : nums){
+      if(num!=0.0){
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static double max(double... nums){
+    double max = Double.MAX_VALUE;
+    for(double num : nums){
+      max=Math.max(max, num);
+    }
+    return max;
+  }
+
+  private final SysIdRoutine.Config m_sysIdConfig = new SysIdRoutine.Config(
+    Volts.of(2).per(Second),         // Default ramp rate (1V/s)
+    Volts.of(7),  // Step voltage for dynamic tests (Reduce if space is small)
+    Seconds.of(6),         // Default timeout (10 seconds)
+    null          // Default log consumer (Logs directly to DataLogManager/WPILog)
+  );
+
+  // 2. Define the Translation (Forward/Backward) Routine
+  private final SysIdRoutine m_translationRoutine = new SysIdRoutine(
+      m_sysIdConfig,
+      new SysIdRoutine.Mechanism(
+          (Voltage volts) -> {
+            // Drive all 4 motors forward equally
+            SysidMode=1;
+            m_lastSysIdVoltage = volts.in(Volts);
+            double v = volts.in(Volts);
+            m_frontLeftMotor.setVoltage(v);
+            m_frontRightMotor.setVoltage(v);
+            m_backLeftMotor.setVoltage(v);
+            m_backRightMotor.setVoltage(v);
+          },
+          this::logDriveData, // Feed encoder and voltage data into SysId
+          this
+      )
+  );
+
+  // 3. Define the Strafing (Sideways) Routine
+  private final SysIdRoutine m_strafeRoutine = new SysIdRoutine(
+      m_sysIdConfig,
+      new SysIdRoutine.Mechanism(
+          (Voltage volts) -> {
+            // Apply diagonal voltages to force the mecanum wheels to slide sideways
+            SysidMode=2;
+            m_lastSysIdVoltage = volts.in(Volts);
+            double v = volts.in(Volts);
+            m_frontLeftMotor.setVoltage(v);
+            m_frontRightMotor.setVoltage(-v);
+            m_backLeftMotor.setVoltage(-v);
+            m_backRightMotor.setVoltage(v);
+          },
+          this::logDriveData, // Uses the exact same logger format
+          this
+      )
+  );
+
+  private final SysIdRoutine m_rotationRoutine = new SysIdRoutine(
+      m_sysIdConfig,
+      new SysIdRoutine.Mechanism(
+          (Voltage volts) -> {
+            // Apply diagonal voltages to force the mecanum wheels to slide sideways
+            SysidMode=3;
+            m_lastSysIdVoltage = volts.in(Volts);
+            double v = volts.in(Volts);
+            m_frontLeftMotor.setVoltage(-v);
+            m_frontRightMotor.setVoltage(v);
+            m_backLeftMotor.setVoltage(-v);
+            m_backRightMotor.setVoltage(v);
+          },
+          this::logDriveData, // Uses the exact same logger format
+          this
+      )
+  );
+
+  private void logDriveData(SysIdRoutineLog log) {
+    switch (SysidMode) {
+      case 1 ->
+          log.motor("drive")
+              .voltage(Volts.of(m_lastSysIdVoltage))
+              .linearPosition(Meters.of(getPose().getX()))
+              .linearVelocity(MetersPerSecond.of(getRobotRelativeSpeeds().vxMetersPerSecond));
+
+      case 2 ->
+          log.motor("drive")
+              .voltage(Volts.of(m_lastSysIdVoltage))
+              .linearPosition(Meters.of(getPose().getY()))
+              .linearVelocity(MetersPerSecond.of(getRobotRelativeSpeeds().vyMetersPerSecond));
+
+      case 3 ->
+          log.motor("drive")
+              .voltage(Volts.of(m_lastSysIdVoltage))
+              .angularPosition(Radians.of(getPose().getRotation().getRadians()))
+              .angularVelocity(RadiansPerSecond.of(getRobotRelativeSpeeds().omegaRadiansPerSecond));
+    } 
+  }
+
+  public Command sysIdQuasistaticTranslation(SysIdRoutine.Direction direction) {
+    return m_translationRoutine.quasistatic(direction).beforeStarting(() -> resetPose());
+  }
+
+  public Command sysIdDynamicTranslation(SysIdRoutine.Direction direction) {
+    return m_translationRoutine.dynamic(direction).beforeStarting(() -> resetPose());
+  }
+
+  public Command sysIdQuasistaticStrafe(SysIdRoutine.Direction direction) {
+    return m_strafeRoutine.quasistatic(direction).beforeStarting(() -> resetPose());
+  }
+
+  public Command sysIdDynamicStrafe(SysIdRoutine.Direction direction) {
+    return m_strafeRoutine.dynamic(direction).beforeStarting(() -> resetPose());
+  }
+
+  public Command sysIdQuasistaticRotation(SysIdRoutine.Direction direction) {
+    return m_rotationRoutine.quasistatic(direction).beforeStarting(() -> resetPose());
+  }
+
+  public Command sysIdDynamicRotation(SysIdRoutine.Direction direction) {
+    return m_rotationRoutine.dynamic(direction).beforeStarting(() -> resetPose());
+  }
   
 }

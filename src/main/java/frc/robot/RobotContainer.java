@@ -10,7 +10,10 @@ import com.pathplanner.lib.auto.AutoBuilder;
 import com.pathplanner.lib.auto.NamedCommands;
 import com.pathplanner.lib.commands.PathPlannerAuto;
 
+import edu.wpi.first.hal.SimDevice.Direction;
 import edu.wpi.first.wpilibj.GenericHID;
+import edu.wpi.first.wpilibj.XboxController;
+import frc.robot.Constants.OperatorConstants;
 import frc.robot.Constants.PathplannerConstants;
 import frc.robot.Utils.SwappableController;
 import frc.robot.commands.MecanumDrive;
@@ -33,6 +36,7 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 //import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 //import edu.wpi.first.wpilibj2.command.button.
+import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 
 /**
  * This class is where the bulk of the robot should be declared. Since Command-based is a
@@ -70,12 +74,17 @@ public class RobotContainer {
    */
   private void configureButtonBindings() {
     new RslCommand(m_rsl);
+    m_drivetrain.setDefaultCommand(getMecanumDriveCommand().ignoringDisable(false));
+
+    if (OperatorConstants.runningSysid){
+      sysidMappings();
+      return;
+    }
     //CommandScheduler.getInstance().schedule(new PrintCommand(String.valueOf(m_drivetrain.maxAccX)).repeatedly());
     
     m_arm.setAngle(80);
     // Default command is arcade drive. This will run unless another command
     // is scheduled over it.
-    m_drivetrain.setDefaultCommand(getMecanumDriveCommand());
 
     // Example of how to use the onboard IO
     Trigger userButton = new Trigger(m_onboardIO::getUserButtonPressed);
@@ -98,9 +107,9 @@ public class RobotContainer {
         .whileTrue(Commands.run(()->m_arm.setPosition(m_controller.getLeftTriggerAxis()), m_arm))
         //.onFalse(new InstantCommand(() -> m_arm.setAngle(-45), m_arm).onlyIf(() -> m_arm.getCurrentCommand()==null));
         ;
-    m_controller.leftBumper()
+    /*m_controller.leftBumper()
         .whileTrue(new InstantCommand(() -> m_arm.printPosition()).repeatedly().ignoringDisable(true));
-    
+    */
 
     m_arm.setDefaultCommand(Commands.run(() -> m_arm.setAngle(0.0), m_arm));
     NamedCommands.registerCommand("arm up", Commands.run(() -> m_arm.setAngle(180), m_arm).andThen(Commands.run(()->System.out.println("e"))).repeatedly().ignoringDisable(true));
@@ -111,6 +120,50 @@ public class RobotContainer {
     //m_chooser.addOption("Pathplanner Test Auto", new PathPlannerAuto("New Auto"));
     //m_chooser.addOption("curve", new PathPlannerAuto("curve"));
     SmartDashboard.putData(m_chooser);
+  }
+  
+  public void sysidMappings(){
+    //translate Quasistatic forward -> x && left bumper
+    m_controller.x().and(m_controller.leftBumper()).whileTrue(m_drivetrain.sysIdQuasistaticTranslation(SysIdRoutine.Direction.kForward));
+
+    //translate Quasistatic backward -> b && left bumper
+    m_controller.b().and(m_controller.leftBumper()).whileTrue(m_drivetrain.sysIdQuasistaticTranslation(SysIdRoutine.Direction.kReverse));
+
+    //translate Dynamic forward -> x && right bumper
+    m_controller.x().and(m_controller.rightBumper()).whileTrue(m_drivetrain.sysIdDynamicTranslation(SysIdRoutine.Direction.kForward));
+
+    //translate Dynamic forward -> b && right bumper
+    m_controller.b().and(m_controller.rightBumper()).whileTrue(m_drivetrain.sysIdDynamicTranslation(SysIdRoutine.Direction.kReverse));
+
+
+
+    //strafe Quasistatic left -> y && left bumper
+    m_controller.y().and(m_controller.leftBumper()).whileTrue(m_drivetrain.sysIdQuasistaticStrafe(SysIdRoutine.Direction.kReverse));
+    
+    //strafe Quasistatic right -> a && left bumper
+    m_controller.a().and(m_controller.leftBumper()).whileTrue(m_drivetrain.sysIdQuasistaticStrafe(SysIdRoutine.Direction.kForward));
+
+    //strafe Dynamic left -> y && right bumper
+    m_controller.y().and(m_controller.rightBumper()).whileTrue(m_drivetrain.sysIdDynamicStrafe(SysIdRoutine.Direction.kReverse));
+    
+    //strafe Dynamic right -> a && right bumper
+    m_controller.a().and(m_controller.rightBumper()).whileTrue(m_drivetrain.sysIdDynamicStrafe(SysIdRoutine.Direction.kForward));
+
+
+    
+    //rotate Quasistatic counter clockwise -> leftTrigger && left bumper
+    m_controller.leftTrigger().and(m_controller.leftBumper()).whileTrue(m_drivetrain.sysIdQuasistaticRotation(SysIdRoutine.Direction.kForward));
+
+    //rotate Quasistatic clockwise -> rightTrigger && left bumper
+    m_controller.rightTrigger().and(m_controller.leftBumper()).whileTrue(m_drivetrain.sysIdQuasistaticRotation(SysIdRoutine.Direction.kReverse));
+
+    //rotate Dynamic counter clockwise -> leftTrigger && right bumper
+    m_controller.leftTrigger().and(m_controller.rightBumper()).whileTrue(m_drivetrain.sysIdDynamicRotation(SysIdRoutine.Direction.kForward));
+
+    //rotate Dynamic clockwise -> rightTrigger && right bumper
+    m_controller.rightTrigger().and(m_controller.rightBumper()).whileTrue(m_drivetrain.sysIdDynamicRotation(SysIdRoutine.Direction.kReverse));
+  
+  
   }
 
   /**
